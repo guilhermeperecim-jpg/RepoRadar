@@ -13,6 +13,8 @@ function sanitizeInput(text: string, maxLength: number): string {
         .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // remove caracteres de controle
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
         .trim()
         .slice(0, maxLength);
 }
@@ -34,7 +36,7 @@ export async function generateCommitSummary(commits: any[], pusherName: string):
 
         // Prepara os dados dos commits com sanitização estrita e limites de tamanho
         const limitedCommits = commits.slice(-5);
-        let commitDataXml = `<untrusted_git_commits pusher="${safePusher}">\n`;
+        let commitDataXml = `<untrusted_git_commits>\n  <pusher>${safePusher}</pusher>\n`;
         
         limitedCommits.forEach((commit, index) => {
             const rawMessage = typeof commit.message === 'string' ? commit.message : 'Sem mensagem';

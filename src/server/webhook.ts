@@ -17,10 +17,11 @@ function verifySignature(req: any): boolean {
     const secret = process.env.GITHUB_WEBHOOK_SECRET;
     const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
-    // Se não houver segredo configurado no ambiente, permite a requisição mas emite aviso
+    // Fail-closed: sem secret configurado, REJEITA todas as requisições.
+    // Isso impede que um deploy sem a variável volte silenciosamente ao ponto zero de segurança.
     if (!secret) {
-        console.warn("⚠️ AVISO DE SEGURANÇA: GITHUB_WEBHOOK_SECRET não configurado. Aceitando webhook sem verificação de assinatura.");
-        return true;
+        console.error("❌ ERRO DE SEGURANÇA: GITHUB_WEBHOOK_SECRET não configurado. Recusando webhook. Configure a variável de ambiente antes de aceitar eventos.");
+        return false;
     }
 
     if (!signature || !req.rawBody) {
