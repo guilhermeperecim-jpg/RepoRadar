@@ -1,0 +1,30 @@
+{
+  "name": "repo-radar",
+  "version": "1.0.0",
+  "description": "🛰️ Bot inteligente para Discord que monitora repositórios do GitHub em tempo real com resumos gerados por IA.",
+  "author": "Guilherme Perecim",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guilhermeperecim-jpg/repo-radar"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "dev": "nodemon src/index.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
