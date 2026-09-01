@@ -12,6 +12,14 @@ Além disso, utiliza o **Google Gemini (3.5 Flash)** para analisar o contexto da
 
 ---
 
+## 📸 Demonstração em Ação
+
+<p align="center">
+  <img src="./assets/demo.png" alt="Demonstração do RepoRadar no Discord" width="650px" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+</p>
+
+---
+
 ## ✨ Principais Funcionalidades
 
 - 🔔 **Notificações em Tempo Real** — Alertas instantâneos no Discord para eventos de `push` e `pull_request`.
@@ -169,6 +177,8 @@ Saída esperada no terminal:
 
 ```
 repo-radar/
+├── assets/
+│   └── demo.png              # Imagem de demonstração para o README
 ├── src/
 │   ├── index.ts              # Ponto de entrada da aplicação (inicia Bot e Servidor)
 │   ├── bot/
