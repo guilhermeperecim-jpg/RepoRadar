@@ -1,10 +1,44 @@
 import express from 'express';
+import crypto from 'crypto';
 import { sendNotificationToChannel } from '../bot/client';
 import { getCurrentMonitoredRepo } from '../bot/configManager';
 import { generateCommitSummary } from './ai';
 
 const app = express();
-app.use(express.json());
+
+// Captura o rawBody para validação criptográfica byte-a-byte do HMAC
+app.use(express.json({
+    verify: (req: any, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
+
+function verifySignature(req: any): boolean {
+    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    const signature = req.headers['x-hub-signature-256'] as string | undefined;
+
+    // Se não houver segredo configurado no ambiente, permite a requisição mas emite aviso
+    if (!secret) {
+        console.warn("⚠️ AVISO DE SEGURANÇA: GITHUB_WEBHOOK_SECRET não configurado. Aceitando webhook sem verificação de assinatura.");
+        return true;
+    }
+
+    if (!signature || !req.rawBody) {
+        return false;
+    }
+
+    const hmac = crypto.createHmac('sha256', secret);
+    const digest = 'sha256=' + hmac.update(req.rawBody).digest('hex');
+
+    const signatureBuffer = Buffer.from(signature, 'utf8');
+    const digestBuffer = Buffer.from(digest, 'utf8');
+
+    if (signatureBuffer.length !== digestBuffer.length) {
+        return false;
+    }
+
+    return crypto.timingSafeEqual(signatureBuffer, digestBuffer);
+}
 
 export function startServer(port: number) {
     // Rota amigável para o navegador não mostrar "Cannot GET /"
@@ -17,6 +51,12 @@ export function startServer(port: number) {
     });
 
     app.post('/webhooks/github', async (req, res) => {
+        // 1. Validação de Assinatura Criptográfica
+        if (!verifySignature(req)) {
+            console.error("❌ ERRO DE SEGURANÇA: Assinatura do webhook inválida ou ausente (X-Hub-Signature-256).");
+            return res.status(401).send("Assinatura do webhook inválida.");
+        }
+
         const event = req.headers['x-github-event'];
         const payload = req.body;
 
@@ -28,10 +68,12 @@ export function startServer(port: number) {
         const currentRepo = getCurrentMonitoredRepo();
         const incomingRepo = payload.repository?.full_name || payload.repository?.name;
 
-        // Filtro de Repositório
-        if (currentRepo && incomingRepo && incomingRepo.toLowerCase() !== currentRepo.toLowerCase()) {
-            console.log(`Ignorando evento do repositório ${incomingRepo} (Monitorando: ${currentRepo})`);
-            return res.status(200).send('Ignorado');
+        // 2. Filtro Estrito de Repositório (impede payloads malformados ou de repositórios não autorizados)
+        if (currentRepo) {
+            if (!incomingRepo || incomingRepo.toLowerCase() !== currentRepo.toLowerCase()) {
+                console.log(`[Filtro] Ignorando evento do repositório ${incomingRepo || 'indefinido'} (Monitorando: ${currentRepo})`);
+                return res.status(200).send('Ignorado pelo filtro de repositório');
+            }
         }
 
         console.log(`Recebido evento do GitHub: ${event}`);

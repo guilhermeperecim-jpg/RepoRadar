@@ -102,6 +102,9 @@ DISCORD_CHANNEL_ID=id_do_canal_onde_as_mensagens_sao_enviadas
 GEMINI_API_KEY=sua_chave_da_api_do_gemini
 GEMINI_MODEL=gemini-3.5-flash
 
+# Segurança do Webhook do GitHub (Recomendado para produção)
+GITHUB_WEBHOOK_SECRET=seu_segredo_do_webhook_github
+
 # Porta do servidor Express
 PORT=3000
 ```
@@ -110,6 +113,7 @@ PORT=3000
 > - `DISCORD_TOKEN`: Portal do Desenvolvedor Discord > Sua Aplicação > Aba **Bot** > Botão **Reset Token**.
 > - `DISCORD_CHANNEL_ID`: No Discord (com o Modo Desenvolvedor ativo), clique com o botão direito no canal desejado > **Copiar ID do canal**.
 > - `GEMINI_API_KEY`: Acesse o [Google AI Studio](https://aistudio.google.com/app/apikey) e clique em **Create API Key**.
+> - `GITHUB_WEBHOOK_SECRET`: Qualquer senha/chave forte definida por você e informada no campo **Secret** do Webhook no GitHub.
 
 ---
 

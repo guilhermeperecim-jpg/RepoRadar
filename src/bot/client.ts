@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, Message, SlashCommandBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, Message, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getCurrentMonitoredRepo, setCurrentMonitoredRepo } from './configManager';
 
 const client = new Client({
@@ -57,9 +57,21 @@ export function startBot(token: string) {
             const defaultRepo = getCurrentMonitoredRepo();
 
             if (!defaultRepo) {
-                await textChannel.send("Olá, estou online e pronto para trabalhar! 🚀\nNo entanto, não há nenhum repositório padrão setado. Por favor, digite no chat o nome do repositório que você quer que eu monitore (ex: `usuario/repo`).");
+                await textChannel.send("Olá, estou online e pronto para trabalhar! 🚀\nNo entanto, não há nenhum repositório padrão setado. Por favor, um **administrador** digite no chat o nome do repositório que deseja monitorar (ex: `usuario/repo`).");
                 
-                const filter = (m: Message) => !m.author.bot;
+                const filter = (m: Message) => {
+                    if (m.author.bot) return false;
+                    const isAdmin = m.member?.permissions.has(PermissionFlagsBits.Administrator) ||
+                                    m.member?.permissions.has(PermissionFlagsBits.ManageGuild);
+                    if (!isAdmin) {
+                        m.reply("⚠️ Apenas administradores do servidor podem configurar o repositório monitorado.")
+                            .then(replyMsg => setTimeout(() => replyMsg.delete().catch(() => {}), 5000))
+                            .catch(() => {});
+                        return false;
+                    }
+                    return true;
+                };
+
                 const collector = textChannel.createMessageCollector({ filter, max: 1, time: 60000 });
 
                 collector.on('collect', m => {
@@ -94,12 +106,28 @@ export function startBot(token: string) {
                 const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
 
                 collector.on('collect', async i => {
+                    // Verificação de permissões do usuário que clicou no botão
+                    const memberPerms = i.memberPermissions;
+                    const isAdmin = memberPerms?.has(PermissionFlagsBits.Administrator) ||
+                                    memberPerms?.has(PermissionFlagsBits.ManageGuild);
+
+                    if (!isAdmin) {
+                        await i.reply({ content: "⚠️ Apenas administradores do servidor podem alterar essas configurações.", ephemeral: true });
+                        return;
+                    }
+
                     if (i.customId === 'keep_default') {
                         await i.update({ content: `✅ Beleza! Continuarei monitorando o repositório **${defaultRepo}**.`, components: [] });
                     } else if (i.customId === 'new_repo') {
                         await i.update({ content: "Certo! Por favor, digite no chat o nome do novo repositório (ex: `usuario/repo`).", components: [] });
                         
-                        const msgFilter = (m: Message) => !m.author.bot && m.author.id === i.user.id;
+                        const msgFilter = (m: Message) => {
+                            if (m.author.bot || m.author.id !== i.user.id) return false;
+                            const isUserAdmin = m.member?.permissions.has(PermissionFlagsBits.Administrator) ||
+                                                m.member?.permissions.has(PermissionFlagsBits.ManageGuild);
+                            return !!isUserAdmin;
+                        };
+
                         const msgCollector = textChannel.createMessageCollector({ filter: msgFilter, max: 1, time: 60000 });
                         
                         msgCollector.on('collect', m => {
