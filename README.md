@@ -205,6 +205,8 @@ Este projeto está licenciado sob a licença **MIT** — consulte o arquivo [LIC
 
 ---
 
+Embora existam ferramentas que fazem parte do que o RepoRadar faz (como webhooks nativos ou CLIs de resumo), o RepoRadar é uma solução completa que une monitoramento em tempo real, inteligência artificial e interatividade em um único bot — algo que não encontrei em nenhum outro projeto open source.
+
 ## 👨‍💻 Autor
 
 Desenvolvido por **Guilherme Perecim**.
