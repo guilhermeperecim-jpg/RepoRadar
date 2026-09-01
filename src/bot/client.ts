@@ -13,7 +13,16 @@ const client = new Client({
 const commands = [
     new SlashCommandBuilder().setName('ping').setDescription('Verifica a latência do bot'),
     new SlashCommandBuilder().setName('criador').setDescription('Mostra informações sobre o criador do bot'),
-    new SlashCommandBuilder().setName('status').setDescription('Verifica qual repositório está sendo monitorado atualmente')
+    new SlashCommandBuilder().setName('status').setDescription('Verifica qual repositório está sendo monitorado atualmente'),
+    new SlashCommandBuilder()
+        .setName('setrepo')
+        .setDescription('Define o repositório do GitHub a ser monitorado pelo bot')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addStringOption(option =>
+            option.setName('repositorio')
+                .setDescription('Nome do repositório no formato usuario/repo (ex: facebook/react)')
+                .setRequired(true)
+        )
 ].map(command => command.toJSON());
 
 // Evento que escuta as interações dos comandos
@@ -29,8 +38,31 @@ client.on('interactionCreate', async interaction => {
         if (currentRepo) {
             await interaction.reply(`👀 Atualmente estou monitorando os webhooks do repositório: **${currentRepo}**`);
         } else {
-            await interaction.reply("❌ Não estou monitorando nenhum repositório no momento.");
+            await interaction.reply("❌ Não estou monitorando nenhum repositório no momento. Use `/setrepo usuario/repo` para configurar!");
         }
+    } else if (interaction.commandName === 'setrepo') {
+        const memberPerms = interaction.memberPermissions;
+        const isAdmin = memberPerms?.has(PermissionFlagsBits.Administrator) ||
+                        memberPerms?.has(PermissionFlagsBits.ManageGuild);
+
+        if (!isAdmin) {
+            await interaction.reply({ content: "⚠️ Apenas administradores do servidor podem executar este comando.", ephemeral: true });
+            return;
+        }
+
+        const repoInput = interaction.options.getString('repositorio', true).trim();
+        const repoRegex = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+
+        if (!repoRegex.test(repoInput)) {
+            await interaction.reply({
+                content: `❌ Formato inválido! O nome do repositório deve seguir o padrão \`usuario/nome-do-repo\` (ex: \`guilherme/calculadora\`).`,
+                ephemeral: true
+            });
+            return;
+        }
+
+        setCurrentMonitoredRepo(repoInput);
+        await interaction.reply(`✅ Repositório configurado com sucesso! Agora estou monitorando os eventos de: **${repoInput}** 🛰️`);
     }
 });
 
@@ -57,86 +89,9 @@ export function startBot(token: string) {
             const defaultRepo = getCurrentMonitoredRepo();
 
             if (!defaultRepo) {
-                await textChannel.send("Olá, estou online e pronto para trabalhar! 🚀\nNo entanto, não há nenhum repositório padrão setado. Por favor, um **administrador** digite no chat o nome do repositório que deseja monitorar (ex: `usuario/repo`).");
-                
-                const filter = (m: Message) => {
-                    if (m.author.bot) return false;
-                    const isAdmin = m.member?.permissions.has(PermissionFlagsBits.Administrator) ||
-                                    m.member?.permissions.has(PermissionFlagsBits.ManageGuild);
-                    if (!isAdmin) {
-                        m.reply("⚠️ Apenas administradores do servidor podem configurar o repositório monitorado.")
-                            .then(replyMsg => setTimeout(() => replyMsg.delete().catch(() => {}), 5000))
-                            .catch(() => {});
-                        return false;
-                    }
-                    return true;
-                };
-
-                const collector = textChannel.createMessageCollector({ filter, max: 1, time: 60000 });
-
-                collector.on('collect', m => {
-                    const repoName = m.content.trim();
-                    setCurrentMonitoredRepo(repoName);
-                    textChannel.send(`✅ Repositório padrão definido para: **${repoName}**! Estou monitorando a partir de agora.`);
-                });
-                
-                collector.on('end', collected => {
-                    if (collected.size === 0) {
-                        textChannel.send("Tempo esgotado! Reinicie o bot ou configure manualmente depois.");
-                    }
-                });
+                await textChannel.send("Olá, estou online e pronto para trabalhar! 🚀\n⚠️ Nenhum repositório padrão está configurado.\n👉 Use o comando `/setrepo usuario/repo` para definir o repositório a qualquer momento.");
             } else {
-                const row = new ActionRowBuilder<ButtonBuilder>()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId('keep_default')
-                            .setLabel('Monitorar Padrão')
-                            .setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder()
-                            .setCustomId('new_repo')
-                            .setLabel('Novo Repositório')
-                            .setStyle(ButtonStyle.Secondary)
-                    );
-
-                const msg = await textChannel.send({
-                    content: `Olá, estou online e pronto para trabalhar! 🚀\nDeseja monitorar o repositório padrão (**${defaultRepo}**) ou configurar um novo?`,
-                    components: [row]
-                });
-
-                const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
-
-                collector.on('collect', async i => {
-                    // Verificação de permissões do usuário que clicou no botão
-                    const memberPerms = i.memberPermissions;
-                    const isAdmin = memberPerms?.has(PermissionFlagsBits.Administrator) ||
-                                    memberPerms?.has(PermissionFlagsBits.ManageGuild);
-
-                    if (!isAdmin) {
-                        await i.reply({ content: "⚠️ Apenas administradores do servidor podem alterar essas configurações.", ephemeral: true });
-                        return;
-                    }
-
-                    if (i.customId === 'keep_default') {
-                        await i.update({ content: `✅ Beleza! Continuarei monitorando o repositório **${defaultRepo}**.`, components: [] });
-                    } else if (i.customId === 'new_repo') {
-                        await i.update({ content: "Certo! Por favor, digite no chat o nome do novo repositório (ex: `usuario/repo`).", components: [] });
-                        
-                        const msgFilter = (m: Message) => {
-                            if (m.author.bot || m.author.id !== i.user.id) return false;
-                            const isUserAdmin = m.member?.permissions.has(PermissionFlagsBits.Administrator) ||
-                                                m.member?.permissions.has(PermissionFlagsBits.ManageGuild);
-                            return !!isUserAdmin;
-                        };
-
-                        const msgCollector = textChannel.createMessageCollector({ filter: msgFilter, max: 1, time: 60000 });
-                        
-                        msgCollector.on('collect', m => {
-                            const repoName = m.content.trim();
-                            setCurrentMonitoredRepo(repoName);
-                            textChannel.send(`✅ Repositório atualizado com sucesso! Agora estou monitorando: **${repoName}**`);
-                        });
-                    }
-                });
+                await textChannel.send(`Olá, estou online e pronto para trabalhar! 🚀\n👀 Monitorando ativamente: **${defaultRepo}**\n*(Para alterar o repositório a qualquer momento, use \`/setrepo usuario/repo\`)*`);
             }
         } catch (error) {
             console.error("Erro na rotina de inicialização do bot:", error);

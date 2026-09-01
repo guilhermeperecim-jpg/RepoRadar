@@ -80,6 +80,13 @@ export function startServer(port: number) {
 
         try {
             if (event === 'push') {
+                // Checagem de bots (Dependabot, Renovate, etc.) para evitar consumo inútil de IA
+                const isBotUser = payload.sender?.type === 'Bot' ||
+                                  payload.pusher?.name?.toLowerCase().includes('[bot]') ||
+                                  payload.sender?.login?.toLowerCase().includes('[bot]') ||
+                                  payload.sender?.login?.toLowerCase().includes('dependabot') ||
+                                  payload.sender?.login?.toLowerCase().includes('renovate');
+
                 // Formatar lista de commits
                 let commitDescription = `O usuário **${payload.pusher?.name || 'Alguém'}** fez um push de ${payload.commits?.length || 0} commits.\n\n`;
                 
@@ -99,9 +106,15 @@ export function startServer(port: number) {
                     }
                 }
 
-                // Chamar a IA para gerar o resumo
-                console.log("Gerando resumo com Inteligência Artificial...");
-                const aiSummary = await generateCommitSummary(payload.commits || [], payload.pusher?.name || 'Alguém');
+                // Chamar IA apenas para usuários humanos (economiza tokens de bots)
+                let aiSummary: string;
+                if (isBotUser) {
+                    console.log(`[Bot Filter] Push de bot automatizado (${payload.sender?.login || payload.pusher?.name}). Economizando cota da IA.`);
+                    aiSummary = `🤖 *Atualização automatizada de dependências/bot por **${payload.sender?.login || payload.pusher?.name || 'Bot'}**.*`;
+                } else {
+                    console.log("Gerando resumo com Inteligência Artificial...");
+                    aiSummary = await generateCommitSummary(payload.commits || [], payload.pusher?.name || 'Alguém');
+                }
 
                 const embed = {
                     color: 0x0099ff,
@@ -117,11 +130,44 @@ export function startServer(port: number) {
                 await sendNotificationToChannel(DISCORD_CHANNEL_ID, embed);
                 
             } else if (event === 'pull_request') {
-                 const embed = {
-                    color: 0x00ff00,
-                    title: `Pull Request ${payload.action}: ${payload.pull_request?.title || 'Sem Título'}`,
-                    description: `Repositório: ${incomingRepo}`,
-                    url: payload.pull_request?.html_url || ''
+                const action = payload.action;
+                const pr = payload.pull_request;
+                const isMerged = pr?.merged === true;
+
+                // Mapeamento dinâmico de cores e títulos no padrão oficial do GitHub
+                let embedColor = 0x3498db; // Azul padrão
+                let statusTitle = `Pull Request ${action}: #${pr?.number || ''} ${pr?.title || 'Sem Título'}`;
+
+                if (action === 'closed') {
+                    if (isMerged) {
+                        embedColor = 0x8957e5; // Roxo (Merged no GitHub)
+                        statusTitle = `🟣 Pull Request Mesclado (Merged): #${pr?.number || ''} ${pr?.title || ''}`;
+                    } else {
+                        embedColor = 0xe74c3c; // Vermelho (Closed/Rejected)
+                        statusTitle = `🔴 Pull Request Fechado: #${pr?.number || ''} ${pr?.title || ''}`;
+                    }
+                } else if (action === 'opened' || action === 'reopened') {
+                    embedColor = 0x2ecc71; // Verde (Open)
+                    statusTitle = `🟢 Pull Request Aberto: #${pr?.number || ''} ${pr?.title || ''}`;
+                } else if (action === 'review_requested') {
+                    embedColor = 0xf1c40f; // Amarelo (Review Requested)
+                    statusTitle = `🟡 Revisão Solicitada: #${pr?.number || ''} ${pr?.title || ''}`;
+                }
+
+                const prDescription = pr?.body 
+                    ? (pr.body.length > 300 ? pr.body.slice(0, 300) + '...' : pr.body) 
+                    : '*Nenhuma descrição fornecida.*';
+
+                const embed = {
+                    color: embedColor,
+                    title: statusTitle,
+                    description: prDescription,
+                    fields: [
+                        { name: '👤 Autor', value: pr?.user?.login || 'Desconhecido', inline: true },
+                        { name: '🔀 Branch', value: `\`${pr?.head?.ref || '?'}\` ➔ \`${pr?.base?.ref || '?'}\``, inline: true },
+                        { name: '📊 Alterações', value: `+${pr?.additions || 0} / -${pr?.deletions || 0} (${pr?.commits || 0} commits)`, inline: true }
+                    ],
+                    url: pr?.html_url || ''
                 };
                 
                 await sendNotificationToChannel(DISCORD_CHANNEL_ID, embed);

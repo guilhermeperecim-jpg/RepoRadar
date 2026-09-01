@@ -26,9 +26,10 @@ Além disso, utiliza o **Google Gemini (3.5 Flash)** para analisar o contexto da
 - 🤖 **Resumos com IA de Alta Performance** — Análise semântica dos commits via **Google Gemini 3.5 Flash**.
 - 🛡️ **Proteção de Escopo e Segurança** — O modelo trata os commits como dados estritos de código, prevenindo desvios de finalidade e injeções de prompt em mensagens de commit.
 - 🔄 **Sistema de Contingência (Fallback Automático)** — Caso o endpoint da IA sofra instabilidades temporárias (como erro 503), o bot alterna automaticamente para modelos de backup (`gemini-3.5-flash-lite`, `gemini-flash-latest`).
-- 🎛️ **Painel Interativo de Inicialização** — Ao ligar, o bot envia uma mensagem com botões interativos (`ActionRowBuilder` / `ButtonBuilder`) para confirmar o repositório padrão ou configurar um novo.
+- 🎨 **Status Visual de PRs no Padrão GitHub** — Embeds com cores semânticas oficiais (🟢 Aberto, 🟣 Mesclado/Merged, 🔴 Fechado sem merge, 🟡 Em revisão).
+- 💰 **Economia Inteligente de Cota** — Detecção automática de bots (Dependabot, Renovate) em pushes para evitar chamadas desnecessárias à IA.
+- ⚡ **Slash Commands Modernos** — Comandos de barra integrados (`/ping`, `/criador`, `/status` e `/setrepo`).
 - 📌 **Persistência de Dados** — Salva as preferências de monitoramento em um arquivo `config.json` local para não perder o repositório configurado após reinicializações.
-- ⚡ **Slash Commands Modernos** — Comandos de barra integrados (`/ping`, `/criador`, `/status`).
 - 🔍 **Filtro Inteligente de Repositórios** — Processa apenas webhooks pertencentes ao repositório selecionado, descartando eventos não monitorados.
 
 ---
@@ -169,11 +170,12 @@ Saída esperada no terminal:
 
 ## 💬 Comandos de Barra (Slash Commands)
 
-| Comando | Descrição |
-| :--- | :--- |
-| `/ping` | Mede a latência da API do Discord e tempo de resposta. |
-| `/criador` | Exibe os créditos e informações do desenvolvedor. |
-| `/status` | Mostra qual repositório do GitHub está atualmente sob monitoramento ativo. |
+| Comando | Descrição | Permissão |
+| :--- | :--- | :--- |
+| `/ping` | Mede a latência da API do Discord e tempo de resposta. | Todos |
+| `/criador` | Exibe os créditos e informações do desenvolvedor. | Todos |
+| `/status` | Mostra qual repositório do GitHub está atualmente sob monitoramento ativo. | Todos |
+| `/setrepo <usuario/repo>` | Define ou altera instantaneamente o repositório monitorado pelo bot. | Administrador |
 
 ---
 
