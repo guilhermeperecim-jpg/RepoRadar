@@ -1,17 +1,39 @@
 import 'dotenv/config';
-import { startBot } from './bot/client';
+import env from './utils/env';
+import logger from './utils/logger';
+import { startBot, getClient } from './bot/client';
 import { startServer } from './server/webhook';
 
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const PORT = process.env.PORT || 3000;
+// ─── Inicia os serviços ──────────────────────────────────────────────────────
 
-if (!DISCORD_TOKEN) {
-    console.error("ERRO: DISCORD_TOKEN não está definido no arquivo .env");
-    process.exit(1);
-}
+logger.info('RepoRadar iniciando...');
 
 // Inicia o bot do Discord
-startBot(DISCORD_TOKEN);
+startBot(env.DISCORD_TOKEN);
 
 // Inicia o servidor Webhook
-startServer(Number(PORT));
+startServer(env.PORT);
+
+// ─── Graceful Shutdown ───────────────────────────────────────────────────────
+
+function shutdown(signal: string): void {
+    logger.info({ signal }, 'Sinal de encerramento recebido. Desligando graciosamente...');
+
+    const client = getClient();
+    client.destroy();
+
+    logger.info('Bot desconectado. Processo encerrado.');
+    process.exit(0);
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+process.on('unhandledRejection', (reason) => {
+    logger.error({ reason }, 'Unhandled Promise Rejection detectada.');
+});
+
+process.on('uncaughtException', (error) => {
+    logger.fatal({ error }, 'Exceção não capturada. Encerrando processo.');
+    process.exit(1);
+});
