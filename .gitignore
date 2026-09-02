@@ -3,3 +3,5 @@ dist/
 .env
 config.json
 *.log
+test_push.ps1
+test_pr.ps1
