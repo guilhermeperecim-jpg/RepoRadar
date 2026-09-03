@@ -23,14 +23,18 @@ Além disso, utiliza o **Google Gemini (3.5 Flash)** para analisar o contexto da
 ## ✨ Principais Funcionalidades
 
 - 🔔 **Notificações em Tempo Real** — Alertas instantâneos no Discord para eventos de `push` e `pull_request`.
-- 🤖 **Resumos com IA de Alta Performance** — Análise semântica dos commits via **Google Gemini 3.5 Flash**.
+- 🤖 **Resumos com IA de Alta Performance** — Análise semântica dos commits via **Google Gemini 3.5 Flash**, com `systemInstruction` dedicado para separação de diretivas de segurança.
 - 🛡️ **Proteção de Escopo e Segurança** — O modelo trata os commits como dados estritos de código, prevenindo desvios de finalidade e injeções de prompt em mensagens de commit.
-- 🔄 **Sistema de Contingência (Fallback Automático)** — Caso o endpoint da IA sofra instabilidades temporárias (como erro 503), o bot alterna automaticamente para modelos de backup (`gemini-3.5-flash-lite`, `gemini-flash-latest`).
-- 🎨 **Status Visual de PRs no Padrão GitHub** — Embeds com cores semânticas oficiais (🟢 Aberto, 🟣 Mesclado/Merged, 🔴 Fechado sem merge, 🟡 Em revisão).
+- 🔄 **Sistema de Contingência (Fallback Automático)** — Caso o endpoint da IA sofra instabilidades temporárias (como erro 503), o bot alterna automaticamente para modelos de backup (`gemini-3.5-flash-lite`, `gemini-flash-latest`), com timeout de 15 segundos por tentativa.
+- 🎨 **Status Visual de PRs no Padrão GitHub** — Embeds com cores semânticas oficiais (🟢 Aberto, 🟣 Mesclado/Merged, 🔴 Fechado sem merge, 🟡 Em revisão) e avatar do autor como thumbnail.
 - 💰 **Economia Inteligente de Cota** — Detecção automática de bots (Dependabot, Renovate) em pushes para evitar chamadas desnecessárias à IA.
-- ⚡ **Slash Commands Modernos** — Comandos de barra integrados (`/ping`, `/criador`, `/status` e `/setrepo`).
-- 📌 **Persistência de Dados** — Salva as preferências de monitoramento em um arquivo `config.json` local para não perder o repositório configurado após reinicializações.
+- ⚡ **Slash Commands Modernos** — Comandos de barra integrados (`/ping`, `/criador`, `/status` e `/setrepo`) com arquitetura modular (Command Handler Pattern).
+- 📌 **Persistência de Dados** — Salva as preferências de monitoramento em um arquivo `config.json` local (com validação via Zod) para não perder o repositório configurado após reinicializações.
 - 🔍 **Filtro Inteligente de Repositórios** — Processa apenas webhooks pertencentes ao repositório selecionado, descartando eventos não monitorados.
+- 🔒 **Segurança Reforçada** — Validação HMAC SHA-256, headers HTTP seguros via Helmet, rate limiting (30 req/min) e limite de body size (1MB).
+- 📊 **Logger Estruturado** — Logs com níveis (info, warn, error, fatal) via Pino, com saída colorida em dev e JSON em produção.
+- ✅ **Validação de Ambiente** — Todas as variáveis de ambiente são validadas na inicialização com Zod. O bot não inicia sem configuração completa.
+- 🔌 **Graceful Shutdown** — Desconexão limpa do Discord ao receber `SIGINT`/`SIGTERM`, com tratamento de exceções não capturadas.
 
 ---
 
@@ -45,10 +49,22 @@ Smee.io (Túnel Dev) / URL Pública (Prod)
        ▼
 Servidor Express (/webhooks/github)
        │
+  ┌────┴──────────────────────────────────┐
+  ▼                                       ▼
+Middlewares de Segurança             Rate Limiter
+(Helmet + HMAC SHA-256)              (30 req/min)
+  │                                       │
+  └────┬──────────────────────────────────┘
+       ▼
+Filtro de Repositório (Ignora não-monitorados)
+       │
   ┌────┴────────────────────────┐
   ▼                             ▼
-Filtro de Repositório     Google Gemini (IA)
-(Ignora não-monitorados)  (Resumo dos Commits)
+Push Handler              PR Handler
+  │                             │
+  ▼                             ▼
+Google Gemini (IA)        Embed Builder
+(Resumo + Fallback)       (Cores GitHub)
   │                             │
   └────┬────────────────────────┘
        ▼
@@ -103,12 +119,14 @@ DISCORD_CHANNEL_ID=id_do_canal_onde_as_mensagens_sao_enviadas
 GEMINI_API_KEY=sua_chave_da_api_do_gemini
 GEMINI_MODEL=gemini-3.5-flash
 
-# Segurança do Webhook do GitHub (Recomendado para produção)
+# Segurança do Webhook do GitHub (OBRIGATÓRIO)
 GITHUB_WEBHOOK_SECRET=seu_segredo_do_webhook_github
 
 # Porta do servidor Express
 PORT=3000
 ```
+
+> ⚠️ **Todas as variáveis acima são obrigatórias.** O bot valida cada uma na inicialização com [Zod](https://zod.dev/) e não inicia se alguma estiver ausente ou inválida.
 
 > **Como obter cada informação:**
 > - `DISCORD_TOKEN`: Portal do Desenvolvedor Discord > Sua Aplicação > Aba **Bot** > Botão **Reset Token**.
@@ -133,9 +151,12 @@ npm start
 
 Saída esperada no terminal:
 ```text
-🤖 Bot conectado como RepoRadar#1234
-✅ Comandos de barra (/) registrados com sucesso!
-🌐 Servidor Webhook rodando na porta 3000
+[16:00:00] INFO: RepoRadar iniciando...
+[16:00:00] INFO: Servidor Webhook rodando.
+    port: 3000
+[16:00:01] INFO: Bot conectado ao Discord.
+    tag: "RepoRadar#1234"
+[16:00:01] INFO: Comandos de barra (/) registrados com sucesso.
 ```
 
 ---
@@ -184,21 +205,42 @@ Saída esperada no terminal:
 ```
 repo-radar/
 ├── assets/
-│   └── demo.png              # Imagem de demonstração para o README
+│   └── demo.png                        # Imagem de demonstração para o README
 ├── src/
-│   ├── index.ts              # Ponto de entrada da aplicação (inicia Bot e Servidor)
+│   ├── index.ts                        # Ponto de entrada + graceful shutdown
+│   ├── types/
+│   │   └── github.ts                   # Interfaces TypeScript dos payloads do GitHub
+│   ├── utils/
+│   │   ├── logger.ts                   # Logger estruturado (Pino)
+│   │   └── env.ts                      # Validação de variáveis de ambiente (Zod)
 │   ├── bot/
-│   │   ├── client.ts         # Instância do Discord.js, comandos e manipuladores
-│   │   └── configManager.ts  # Gerenciador de leitura/escrita do config.json
+│   │   ├── client.ts                   # Instância do Discord.js e despacho de comandos
+│   │   ├── configManager.ts            # Gerenciador de config.json com validação Zod
+│   │   └── commands/
+│   │       ├── index.ts                # Registro central de comandos
+│   │       ├── ping.ts                 # Comando /ping
+│   │       ├── criador.ts              # Comando /criador
+│   │       ├── status.ts               # Comando /status
+│   │       └── setrepo.ts              # Comando /setrepo
 │   └── server/
-│       ├── webhook.ts        # Servidor Express, rotas HTTP e formatação de embeds
-│       └── ai.ts             # Integração com Google Gemini (com fallback resiliente)
-├── config.json               # Armazena o repositório atualmente monitorado
-├── .env.example              # Modelo das variáveis de ambiente
-├── .gitignore                # Arquivos ignorados pelo Git
-├── package.json              # Dependências e scripts do projeto
-├── tsconfig.json             # Configurações do compilador TypeScript
-└── README.md                 # Documentação completa do projeto
+│       ├── app.ts                      # Instância Express (Helmet + body limit)
+│       ├── webhook.ts                  # Rotas HTTP e orquestração de handlers
+│       ├── ai.ts                       # Google Gemini (singleton + fallback + timeout)
+│       ├── middleware/
+│       │   ├── signature.ts            # Validação HMAC SHA-256 do GitHub
+│       │   └── rateLimiter.ts          # Rate limiting (30 req/min por IP)
+│       ├── handlers/
+│       │   ├── push.ts                 # Lógica de eventos de push
+│       │   └── pullRequest.ts          # Lógica de eventos de pull request
+│       └── embeds/
+│           ├── pushEmbed.ts            # Construtor de embeds de push
+│           └── prEmbed.ts              # Construtor de embeds de PR
+├── config.json                         # Armazena o repositório atualmente monitorado
+├── .env.example                        # Modelo das variáveis de ambiente
+├── .gitignore                          # Arquivos ignorados pelo Git
+├── package.json                        # Dependências e scripts do projeto
+├── tsconfig.json                       # Configurações do compilador TypeScript
+└── README.md                           # Documentação completa do projeto
 ```
 
 ---
@@ -206,10 +248,14 @@ repo-radar/
 ## 🛠️ Tecnologias Utilizadas
 
 - **[Node.js](https://nodejs.org/)** — Runtime JavaScript assíncrono.
-- **[TypeScript](https://www.typescriptlang.org/)** — Superset tipado para maior confiabilidade de código.
+- **[TypeScript](https://www.typescriptlang.org/)** — Superset tipado para maior confiabilidade de código (`strict: true`).
 - **[Discord.js](https://discord.js.org/)** (v14) — Biblioteca oficial para desenvolvimento de bots Discord.
 - **[Express](https://expressjs.com/)** — Framework HTTP rápido para processar payloads de Webhooks.
 - **[Google Generative AI](https://ai.google.dev/)** — SDK oficial do Google Gemini para IA generativa.
+- **[Helmet](https://helmetjs.github.io/)** — Middleware de headers de segurança HTTP.
+- **[express-rate-limit](https://github.com/express-rate-limit/express-rate-limit)** — Proteção contra abuso com rate limiting.
+- **[Pino](https://getpino.io/)** — Logger estruturado de alta performance.
+- **[Zod](https://zod.dev/)** — Validação de schemas para variáveis de ambiente e configurações.
 - **[Dotenv](https://github.com/motdotla/dotenv)** — Carregamento de variáveis de ambiente seguras.
 - **[Smee.io](https://smee.io/)** — Túnel de entrega de Webhooks para testes em localhost.
 
